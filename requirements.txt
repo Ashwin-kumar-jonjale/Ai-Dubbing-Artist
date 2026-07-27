@@ -1,0 +1,9 @@
+audio-separator[cpu]
+mlx-whisper
+pyannote.audio
+langchain-ollama
+kokoro-onnx
+soundfile
+pydub
+pyrubberband
+streamlit
