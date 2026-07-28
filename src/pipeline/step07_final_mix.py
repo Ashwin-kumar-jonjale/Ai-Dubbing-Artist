@@ -36,8 +36,11 @@ def apply_acoustic_matching(audio_path: str, output_path: str, vocal_eq_profile:
         board = Pedalboard(effects)
         effected = board(audio, samplerate)
         
-        with AudioFile(output_path, 'w', samplerate, effected.shape[0]) as f:
-            f.write(effected)
+        try:
+            with AudioFile(output_path, 'w', samplerate, effected.shape[0]) as f:
+                f.write(effected)
+        except TypeError as e:
+            raise RuntimeError(f"Pedalboard AudioFile failed with type error on output_path: {type(output_path)} - {output_path}. Error: {e}")
             
         return output_path
     except ImportError:
@@ -49,9 +52,20 @@ def run_final_mix(video_path: str, bgm_path: str, full_vocals_path: str, output_
     Step 10: FFmpeg Video Rendering & Final Mix.
     Applies a 50% audio ducking to the BGM track when characters are speaking.
     """
-    print(f"[Step 10] Running FFmpeg Final Mix on {video_path}...")
+    debug_info = (
+        f"video_path type={type(video_path)}, value={video_path}\n"
+        f"bgm_path type={type(bgm_path)}, value={bgm_path}\n"
+        f"full_vocals_path type={type(full_vocals_path)}, value={full_vocals_path}\n"
+        f"output_path type={type(output_path)}, value={output_path}\n"
+        f"segments type={type(segments)}\n"
+        f"vocal_eq_profile type={type(vocal_eq_profile)}, value={vocal_eq_profile}"
+    )
+    print(f"[Step 10] Running FFmpeg Final Mix...\n{debug_info}")
     
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    try:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    except TypeError as e:
+        raise RuntimeError(f"os.makedirs failed! Types:\n{debug_info}\nOriginal Error: {e}")
     
     # 1. Apply Acoustic Matching (Reverb & EQ) to vocals
     processed_vocals = full_vocals_path.replace(".wav", "_reverb.wav")
@@ -80,6 +94,10 @@ def run_final_mix(video_path: str, bgm_path: str, full_vocals_path: str, output_
         "-c:a", "aac",               # Encode mixed audio to AAC
         output_path
     ]
+    for i, item in enumerate(ffmpeg_cmd):
+        if not isinstance(item, (str, bytes, os.PathLike)):
+            print(f"ERROR: item at index {i} is a {type(item)}: {item}")
+
     
     try:
         result = subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)

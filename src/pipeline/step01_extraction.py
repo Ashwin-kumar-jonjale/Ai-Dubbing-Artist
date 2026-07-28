@@ -33,7 +33,7 @@ def run_extraction(video_path: str, output_dir: str) -> dict:
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
     
     # Locate BS-Roformer output files
-    all_wavs = list(out_dir_obj.glob(f"{video_path_obj.stem}*.wav"))
+    all_wavs = [w for w in out_dir_obj.iterdir() if w.name.startswith(video_path_obj.stem) and w.suffix == '.wav']
     gen_vocals = next((w for w in all_wavs if "(Vocals)" in w.name), None)
     gen_bgm = next((w for w in all_wavs if "(Instrumental)" in w.name), None)
     

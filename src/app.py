@@ -624,13 +624,18 @@ elif st.session_state.step == 4:
                     with st.spinner("Rendering Final Video (FFmpeg)..."):
                         video_name = os.path.basename(st.session_state.video_path)
                         final_out = f"data/output/dubbed_{video_name}"
+                        import importlib
+                        import pipeline.step07_final_mix
+                        importlib.reload(pipeline.step07_final_mix)
+                        from pipeline.step07_final_mix import run_final_mix
                         run_final_mix(current_video, st.session_state.bgm_path, full_vocals, final_out, st.session_state.generated_segments, vocal_eq_profile)
                         st.session_state.final_video_path = final_out
                     
                     trigger_save()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Pipeline failed: {e}")
+                    import traceback
+                    st.error(f"Pipeline failed: {e}\n\nTraceback:\n{traceback.format_exc()}")
             
     else:
         if not os.path.exists(st.session_state.final_video_path):

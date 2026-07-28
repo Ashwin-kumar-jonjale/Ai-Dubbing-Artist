@@ -47,6 +47,7 @@ def get_llm_instance(model_name: str, groq_key: str = None, openai_key: str = No
             api_key=openrouter_key, 
             model="google/gemma-3-27b-it", 
             temperature=temperature,
+            max_tokens=4000,
             default_headers={"Authorization": f"Bearer {openrouter_key}", "HTTP-Referer": "http://localhost:8501"}
         )
     else:
@@ -104,7 +105,10 @@ def run_transcreation(segments: list, model: str = "phi4-mini", protected_words:
         duration = seg['end'] - seg['start']
         seg['target_duration_seconds'] = round(duration, 2)
         # Average Hindi speaking rate is ~12-14 characters per second. We set a max character limit.
-        seg['max_hindi_characters_allowed'] = int(duration * 15)
+        # CRITICAL FIX: Bound the max characters by the source text length to mathematically prevent hallucinations during long pauses.
+        time_based_limit = int(duration * 15)
+        text_based_bound = max(30, len(seg.get('text', '')) * 3)
+        seg['max_hindi_characters_allowed'] = min(time_based_limit, text_based_bound)
         
     glossary_instruction = ""
     if protected_words.strip():
@@ -119,13 +123,17 @@ English: "Acting's what I live and breathe for."
 Formal (BAD): "अभिनय ही मेरा जीवन है।"
 Bollywood (GOOD): "एक्टिंग ही मेरी जिंदगी है।"
 
-English: "I'm a real actor, you said you could box."
-Formal (BAD): "मैं एक असली अभिनेता हूँ, तुमने कहा था तुम मुक्केबाजी कर सकते हो।"
-Bollywood (GOOD): "मैं असली एक्टर हूँ... तुमने कहा था तुम बॉक्सिंग कर सकते हो।"
+English: "I can't even moonwalk."
+Literal (BAD): "मैं मूव भी नहीं कर सकता।"
+Bollywood (GOOD): "मैं मूनवॉक भी नहीं कर सकता..."
 
-English: "Not for a million bucks, not for 10."
-Literal (BAD): "एक मिलियन डॉलर के लिए नहीं, 10 के लिए नहीं।"
-Bollywood (GOOD): "एक लाख के लिए भी नहीं... दस लाख के लिए भी नहीं।"
+English: "Thumbs up."
+Literal (BAD): "अंगूठा ऊपर।"
+Bollywood (GOOD): "थम्ब्स अप।"
+
+English (Fragment over long pause): "while."
+Hallucination (BAD): "थोड़ी देर के लिए... ये प्रोजेक्ट हेल मैरी है, सूरज मर रहा है..."
+Strict Fidelity (GOOD): "कुछ देर के लिए..."
 
 English: "Give me the strength of the ancestors."
 Literal (BAD): "मुझे पूर्वजों की ताकत दो।"
@@ -154,13 +162,14 @@ You are a professional Bollywood Dubbing Director and Elite Translator. Adapt th
 {few_shot_examples}
 
 CRITICAL RULES FOR STUDIO-QUALITY DUBBING:
-1. HINGLISH & COLLOQUIAL BOLLYWOOD TONE: NEVER use overly formal or textbook Hindi (e.g. do not use "अभिनय", "अभिनेता", "मुक्केबाजी"). You MUST use colloquial English loanwords written in Devanagari for modern or industry terms (e.g. एक्टिंग, एक्टर, फिल्म, स्क्रिप्ट, बॉक्सिंग, डायरेक्टर). 
-2. CONSISTENT TRANSLITERATION: Ensure proper nouns (names, places) are transliterated perfectly and consistently throughout the batch (e.g., always use standard spellings like "सिल्वेस्टर", avoiding regional variations like "सिल्व्हेस्टर").
+1. HINGLISH & COLLOQUIAL BOLLYWOOD TONE: NEVER use overly formal or textbook Hindi (e.g. do not use "अभिनय", "अभिनेता"). You MUST use colloquial English loanwords written in Devanagari for modern or industry terms, pop-culture references, or physical gestures (e.g. एक्टिंग, एक्टर, थम्ब्स अप, मूनवॉक, बॉक्सिंग). 
+2. CONSISTENT TRANSLITERATION: Ensure proper nouns (names, places, projects) are transliterated perfectly and consistently throughout the batch (e.g., ALWAYS use "हेल मैरी", NEVER "हैइल मेरी"). Maintain an internal glossary across the batch.
 3. LOCALIZATION: Convert cultural markers naturally. (e.g., convert "millions" to "lakhs" or "crores" when referring to money or large quantities).
 4. PRONOUN & RELATIONSHIP CONTINUITY (CRITICAL): Establish a consistent pronoun register for each relationship (e.g., always "तू" for close friends/cousins, always "आप" for formal). You MUST maintain this perfectly across all segments for the same speaker pairs. Do not arbitrarily flip-flop between "तू" and "तुम".
 5. EMOTIONAL PROSODY (PACING): Acting is about the silence between words. You MUST actively insert ellipses (`...`) into the Hindi text wherever a human actor would take a breath or pause for dramatic effect.
 6. ISOMETRIC TIMING MATCHING: Each segment has a `max_hindi_characters_allowed` based on the video length. The total character count of `hindi_translation` MUST be less than or equal to this limit. If it is too long, the voice will sound incredibly fast and robotic. Condense the phrasing!
-7. COMPLETE PRESERVATION: Do NOT drop active verbs or key semantic concepts. 
+7. COMPLETE PRESERVATION: Do NOT drop active verbs or key semantic concepts.
+8. STRICT FIDELITY (NO HALLUCINATION): You MUST ONLY translate the exact words present in `original_text`. Do NOT invent, fabricate, or summarize the plot to fill time, EVEN IF the video duration is very long (e.g., 10 seconds for a 1-word fragment). If the input is a 1-word fragment, your output MUST be a 1-word fragment. 
 
 [INPUT DETAILS]
 Dialogue Segments to Translate:
